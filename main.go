@@ -1,5 +1,10 @@
 package main
 
+import (
+  "./p2pNetwork"
+)
+
 func main() {
-  test()
+  p := p2pNetwork.NewPeer()
+  p.Listen(8080)
 }
