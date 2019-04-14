@@ -5,6 +5,6 @@ import (
 )
 
 func main() {
-  p := p2pNetwork.NewPeer()
+  p := p2pNetwork.InitPeer("room", "pass")
   p.Listen(8080)
 }
