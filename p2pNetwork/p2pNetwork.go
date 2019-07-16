@@ -5,18 +5,49 @@ import (
   "net"
   "strconv"
   "encoding/binary"
+  "crypto/rand"
+	"crypto/rsa"
+  //"crypto/sha512"
+  //"crypto/md5"
 )
 
 const version uint32 = 1
+
+const RSAbits int = 2048
 
 type ThisPeer struct {
   roomName string
   roomPassword string
   port int
+  RSAKey rsa.PrivateKey
+}
+
+type Peer struct {
+  RSApublic string
+  conn net.Conn
+}
+
+func packageAddLength(pck []byte) []byte {
+  ret := []byte{byte(len(pck))}
+  return append(ret, []byte(pck)...)
 }
 
 func InitPeer(roomName, roomPassword string) ThisPeer {
-  return ThisPeer{roomName, roomPassword, 0}
+  privKey, err := rsa.GenerateKey(rand.Reader, RSAbits)
+	if err != nil {
+		fmt.Println(err)
+  }
+  return ThisPeer{roomName, roomPassword, 0, *privKey}
+}
+
+// func (p ThisPeer) RSAfingerprint() []byte {
+//   h := md5.New()
+//   h.Write(p.RSAKey.Public().Marshal())
+//   return h
+// }
+
+func (p ThisPeer) handleStableConnection(conn net.Conn) {
+  fmt.Println("Connection stable")
 }
 
 func (p ThisPeer) handleConnection(conn net.Conn) {
@@ -29,8 +60,9 @@ func (p ThisPeer) handleConnection(conn net.Conn) {
   binary.LittleEndian.PutUint32(package1, version)
 
   roomNameBytes := []byte(p.roomName)
-  package1 = append(package1, byte(len(roomNameBytes)))
-  package1 = append(package1, roomNameBytes...)
+  //package1 = append(package1, byte(len(roomNameBytes)))
+  //package1 = append(package1, roomNameBytes...)
+  package1 = append(package1, packageAddLength(roomNameBytes)...)
 
   conn.Write(package1)
 
@@ -96,8 +128,9 @@ func (p ThisPeer) Connect(peerIP string) {
       fmt.Println("Stopping the connection")
       conn.Close()
     } else {
-      package2 := []byte{byte(len(p.roomPassword))}
-      package2 = append(package2, []byte(p.roomPassword)...)
+      //package2 := []byte{byte(len(p.roomPassword))}
+      //package2 = append(package2, []byte(p.roomPassword)...)
+      package2 := packageAddLength([]byte(p.roomPassword))
 
       conn.Write(package2)
 
@@ -105,7 +138,8 @@ func (p ThisPeer) Connect(peerIP string) {
       conn.Read(rPackage3)
 
       if rPackage3[0] == 0x80 {
-        fmt.Println("successfully connected to " + p.roomName + " at " + peerIP)
+        fmt.Println("Successfully connected to " + p.roomName + " at " + peerIP)
+        p.handleStableConnection(conn)
       } else if rPackage3[0] == 0x00 {
         fmt.Println("Failed to connect to " + p.roomName + " at " + peerIP)
         fmt.Println("This error can be caused by wrong password")
