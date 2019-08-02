@@ -2,8 +2,9 @@ package main
 
 import (
   "./p2pNetwork"
-  //"fmt"
+  "fmt"
   "flag"
+  "strconv"
 )
 
 // main <PORT> <roomName> [password] [options]
@@ -26,11 +27,17 @@ func main() {
 
   flag.Parse()
 
+  if (roomName == "" && connectIP == "") {
+    roomName, _ = p2pNetwork.RandomHex(4)
+  }
+
   p := p2pNetwork.InitPeer(roomName, roomPass)
   go p.Listen(port)
 
   if connectIP != "" {
     p.Connect(connectIP)
+  } else {
+    fmt.Println("Started a new room: " + roomName + " at port: " + strconv.Itoa(port))
   }
 
   for {}
