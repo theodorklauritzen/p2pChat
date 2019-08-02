@@ -2,6 +2,7 @@ package p2pNetwork
 
 import (
   "fmt"
+  "errors"
   "net"
   "strconv"
   "encoding/binary"
@@ -57,12 +58,11 @@ func InitPeer(roomName, roomPassword string) ThisPeer {
 }
 
 func (p ThisPeer) handleStableConnection(conn net.Conn) {
+  defer conn.Close()
   fmt.Println("Connection stable")
 }
 
 func (p ThisPeer) handleConnection(conn net.Conn) {
-  defer conn.Close()
-
   //conn.SetKeepAlive(true)
 
   // first package
@@ -89,6 +89,7 @@ func (p ThisPeer) handleConnection(conn net.Conn) {
   if (password == p.roomPassword) {
     conn.Write([]byte{0x80})
     fmt.Println("A new peer successfully connected")
+    p.handleStableConnection(conn)
   } else {
     conn.Write([]byte{0x00})
   }
@@ -109,26 +110,52 @@ func (p ThisPeer) Listen(port int) {
   }
 }
 
+func connectgetVersion(conn net.Conn) uint32 {
+  pckg := make([]byte, 4)
+  conn.Read(pckg)
+
+  rVersion := binary.LittleEndian.Uint32(pckg[:4])
+
+  return rVersion
+}
+
+func connectgetRoomName(conn net.Conn) string {
+  packageLength := make([]byte, 1)
+  conn.Read(packageLength)
+  roomName := make([]byte, int(packageLength[0]))
+  conn.Read(roomName)
+
+  return string(roomName)
+}
+
+func connectCheckPassword(conn net.Conn, password string) error {
+  pckg := packageAddLength([]byte(password))
+  conn.Write(pckg)
+
+  res := make([]byte, 1)
+  conn.Read(res)
+
+  if (res[0] == 0x80) {
+    return nil
+  } else {
+    return errors.New("The password was rejected")
+  }
+}
+
 func (p ThisPeer) Connect(peerIP string) {
   conn, err := net.Dial("tcp", peerIP)
   if err != nil {
     fmt.Println(err)
   }
 
-  rPackage1 := make([]byte, 5)
-  conn.Read(rPackage1)
-
-  rVersion := binary.LittleEndian.Uint32(rPackage1[:4])
+  rVersion := connectgetVersion(conn)
 
   if(rVersion != version) {
     fmt.Println("failed to connect to: " + peerIP + ", due to wrong version")
     conn.Close()
   } else {
-    rRoomNameLength := int(rPackage1[4])
-    rPackage1_2 := make([]byte, rRoomNameLength)
-    conn.Read(rPackage1_2)
 
-    roomName := string(rPackage1_2)
+    roomName := connectgetRoomName(conn)
 
     if p.roomName == "" {
       p.roomName = roomName
@@ -138,19 +165,12 @@ func (p ThisPeer) Connect(peerIP string) {
       fmt.Println("Stopping the connection")
       conn.Close()
     } else {
-      //package2 := []byte{byte(len(p.roomPassword))}
-      //package2 = append(package2, []byte(p.roomPassword)...)
-      package2 := packageAddLength([]byte(p.roomPassword))
+      err := connectCheckPassword(conn, p.roomPassword)
 
-      conn.Write(package2)
-
-      rPackage3 := make([]byte, 1)
-      conn.Read(rPackage3)
-
-      if rPackage3[0] == 0x80 {
+      if err == nil {
         fmt.Println("Successfully connected to " + p.roomName + " at " + peerIP)
         p.handleStableConnection(conn)
-      } else if rPackage3[0] == 0x00 {
+      } else {
         fmt.Println("Failed to connect to " + p.roomName + " at " + peerIP)
         fmt.Println("This error can be caused by wrong password")
         conn.Close()
