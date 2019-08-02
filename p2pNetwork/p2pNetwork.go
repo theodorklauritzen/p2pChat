@@ -11,6 +11,8 @@ import (
   //"crypto/md5"
 )
 
+// Variables
+
 const version uint32 = 1
 
 const RSAbits int = 2048
@@ -27,10 +29,14 @@ type Peer struct {
   conn net.Conn
 }
 
+// Simple often used functions
+
 func packageAddLength(pck []byte) []byte {
   ret := []byte{byte(len(pck))}
   return append(ret, []byte(pck)...)
 }
+
+// functions related to the network
 
 func InitPeer(roomName, roomPassword string) ThisPeer {
   privKey, err := rsa.GenerateKey(rand.Reader, RSAbits)
@@ -39,12 +45,6 @@ func InitPeer(roomName, roomPassword string) ThisPeer {
   }
   return ThisPeer{roomName, roomPassword, 0, *privKey}
 }
-
-// func (p ThisPeer) RSAfingerprint() []byte {
-//   h := md5.New()
-//   h.Write(p.RSAKey.Public().Marshal())
-//   return h
-// }
 
 func (p ThisPeer) handleStableConnection(conn net.Conn) {
   fmt.Println("Connection stable")
