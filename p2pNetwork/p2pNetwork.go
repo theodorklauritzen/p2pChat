@@ -7,6 +7,7 @@ import (
   "strconv"
   "encoding/binary"
   "encoding/hex"
+  "encoding/json"
   "crypto/rand"
 	"crypto/rsa"
   //"crypto/sha512"
@@ -27,16 +28,15 @@ type ThisPeer struct {
 }
 
 type Peer struct {
-  RSApublic string
+  RSApublic rsa.PublicKey
   conn net.Conn
 }
 
-// Simple often used functions
-
-func packageAddLength(pck []byte) []byte {
-  ret := []byte{byte(len(pck))}
-  return append(ret, []byte(pck)...)
+type mPeer struct { // the struct to be used while sending messages
+  RSApublicBytes []byte
 }
+
+// Simple often used functions
 
 //https://sosedoff.com/2014/12/15/generate-random-hex-string-in-go.html
 func RandomHex(n int) (string, error) {
@@ -45,6 +45,33 @@ func RandomHex(n int) (string, error) {
     return "", err
   }
   return hex.EncodeToString(bytes), nil
+}
+
+func packageAddLength(pck []byte) []byte {
+  ret := []byte{byte(len(pck))}
+  return append(ret, []byte(pck)...)
+}
+
+func sendBytes(conn net.Conn, b []byte) {
+  conn.Write(packageAddLength(b))
+}
+
+func sendString(conn net.Conn, s string) {
+  sendBytes(conn, []byte(s))
+}
+
+func mPeerToJSON(mp mPeer) ([]byte, error) {
+  b, err := json.Marshal(mp)
+  if err != nil {
+    return nil, err
+  } else {
+    return b, nil
+  }
+}
+
+func (p ThisPeer) tomPeer() mPeer {
+  publickey := p.RSAKey.PublicKey.N
+  return mPeer{publickey.Bytes()}
 }
 
 // functions related to the network
@@ -71,7 +98,7 @@ func inCsendVersion(conn net.Conn) {
 }
 
 func inCsendRoomName(conn net.Conn, roomName string) {
-  conn.Write(packageAddLength([]byte(roomName)))
+  sendString(conn, roomName)
 }
 
 func inCgetRoomPassword(conn net.Conn) string {
@@ -139,8 +166,7 @@ func outCgetRoomName(conn net.Conn) string {
 }
 
 func outCCheckPassword(conn net.Conn, password string) error {
-  pckg := packageAddLength([]byte(password))
-  conn.Write(pckg)
+  sendString(conn, password)
 
   res := make([]byte, 1)
   conn.Read(res)
@@ -179,6 +205,11 @@ func (p ThisPeer) Connect(peerIP string) {
 
       if err == nil {
         fmt.Println("Successfully connected to " + p.roomName + " at " + peerIP)
+        fmt.Println(mPeerToJSON(p.tomPeer()))
+        // TODO
+        // send peerdata (including username)
+        // receive peerdata
+        // receive other peers
         p.handleStableConnection(conn)
       } else {
         fmt.Println("Failed to connect to " + p.roomName + " at " + peerIP)
